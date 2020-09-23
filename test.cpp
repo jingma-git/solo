@@ -116,6 +116,10 @@ void testSum()
     cout << x.sum({1, 2}) << endl;
 }
 
+void testIoU()
+{
+}
+
 int main()
 {
 

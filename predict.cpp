@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include "solo.h"
+#include "nms.h"
 
 using namespace std;
 using namespace torch::indexing;
@@ -138,7 +139,7 @@ void predict()
 
             if (true)
             {
-                string save_dir = "./result/";
+                string save_dir = "./result/raw/";
                 if (!fs::exists(save_dir))
                 {
                     fs::create_directories(save_dir);
@@ -171,13 +172,51 @@ void predict()
             seg_preds = seg_preds.index_select(0, sort_inds);
             sum_masks = sum_masks.index_select(0, sort_inds);
             cate_scores = cate_scores.index_select(0, sort_inds);
-            cate_labels = cate_scores.index_select(0, sort_inds);
+            cate_labels = cate_labels.index_select(0, sort_inds);
+            // Matrix NMS
+            cate_scores = matrix_nms(seg_masks, cate_labels, cate_scores, sum_masks);
+            keep_inds = (cate_scores >= Cfg::update_thr).nonzero().flatten();
+            if (keep_inds.size(0) == 0)
+            {
+                cerr << __FILE__ << " " << __LINE__ << " No instances detected!\n";
+                return;
+            }
+            seg_preds = seg_preds.index_select(0, keep_inds);
+            cate_scores = cate_scores.index_select(0, keep_inds);
+            cate_labels = cate_labels.index_select(0, keep_inds);
+            // sort and keep top_k
+            sort_inds = cate_scores.argsort(0, true);
+            if (sort_inds.size(0) > Cfg::max_per_img)
+            {
+                sort_inds = sort_inds.index({Slice(0, Cfg::max_per_img)});
+            }
+
+            seg_preds = seg_preds.index_select(0, sort_inds);
+            cate_scores = cate_scores.index_select(0, sort_inds);
+            cate_labels = cate_labels.index_select(0, sort_inds);
+
+            seg_masks = (seg_preds > Cfg::mask_thr);
 
             if (true)
             {
+                string save_dir = "./result/nms/";
+                if (!fs::exists(save_dir))
+                {
+                    fs::create_directories(save_dir);
+                }
                 cout << "sorted_scores\n";
                 cout << cate_scores << endl;
+                cout << "sort_inds:\n"
+                     << sort_inds << endl;
+                for (int i = 0; i < seg_masks.size(0); i++)
+                {
+                    int cls = cate_labels[i].detach().cpu().item().toInt();
+                    auto seg_mask = seg_masks[i].toType(at::kFloat).detach().cpu();
+                    auto seg_img = ImgUtil::TensorToMaskMat(seg_mask);
+                    cv::imwrite(save_dir + to_string(i) + "_" + Cfg::class_names[cls + 1] + ".jpg", seg_img);
+                }
             }
+
             break;
         }
         break;

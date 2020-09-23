@@ -57,7 +57,9 @@ struct Cfg
     //************************Predict**************************
     static double score_thr;
     static double mask_thr;
+    static double update_thr;
     static int nms_pre;
+    static int max_per_img;
 
     static int get_cls_idx(std::string cls_name);
 };

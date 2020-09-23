@@ -84,4 +84,6 @@ int Cfg::batch_size = 2;
 //************************Predict**************************
 double Cfg::score_thr = 0.1;
 double Cfg::mask_thr = 0.5;
+double Cfg::update_thr = 0.05;
 int Cfg::nms_pre = 500;
+int Cfg::max_per_img = 100;
