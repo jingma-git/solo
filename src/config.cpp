@@ -28,7 +28,7 @@ std::vector<std::string> Cfg::class_names = {
 bool Cfg::pretrain = false;
 // ResNet
 int Cfg::resnet_arch = 50;
-int Cfg::in_channels = 1;
+int Cfg::in_channels = 3;
 // SOLOHead
 int Cfg::num_classes = Cfg::class_names.size();
 std::vector<int> Cfg::num_grids = {40, 36, 24, 16, 12};
@@ -58,7 +58,7 @@ std::vector<std::string> Cfg::target_view_names = {
 std::string Cfg::input_views = "F";
 int Cfg::num_target_views = 1;
 int Cfg::num_views = 1;
-string Cfg::style_ids = "12345";
+string Cfg::style_ids = "123456";
 
 //************************Data**************************
 string Cfg::output_dir = "./output/";
@@ -76,8 +76,8 @@ int Cfg::get_cls_idx(std::string cls_name)
 
 //************************Train**************************
 int Cfg::epoch = 100;
-int Cfg::val_epoch = 1;
-float Cfg::lr = 1e-1;
+int Cfg::val_epoch = 5;
+float Cfg::lr = 1e-4;
 float Cfg::weight_decay = 1e-5;
 int Cfg::batch_size = 2;
 

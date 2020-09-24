@@ -120,14 +120,15 @@ void SoloDataset::build_raw_data()
                     sprintf(img_name_front, "F_%d_sketch%c.jpg", k, styleID);
                     raw_data.img_path = (data_dir / "sketch" / shape_name / img_name_front).c_str();
 
-                    // TargetData target_front;
-                    // target_front.dn_path = (data_dir / "color" / shape_name / ("F_" + to_string(k) + "_d.json")).c_str();
-                    // string contour_front = (data_dir / "sketch" / shape_name / ("F_" + to_string(k) + "_contour.json")).c_str();
-                    // JsonUtil::load_annos(contour_front, target_front.contours);
+                    TargetData target_front;
+                    target_front.dn_path = (data_dir / "color" / shape_name / ("F_" + to_string(k) + "_d.json")).c_str();
+                    string contour_front = (data_dir / "sketch" / shape_name / ("F_" + to_string(k) + "_contour.json")).c_str();
+                    JsonUtil::load_annos(contour_front, target_front.contours);
+                    raw_data.targets.push_back(target_front);
 
                     // raw_data.targets.push_back(target_front);
 
-                    add_target(shape_name, raw_data);
+                    // add_target(shape_name, raw_data); // don not need depth/mask info from other 6 views
                     raw_datas.push_back(raw_data);
                 }
             }
@@ -143,12 +144,13 @@ void SoloDataset::build_raw_data()
                     sprintf(img_name_side, "S_%d_sketch%c.jpg", k, styleID);
                     raw_data.img_path_side = (data_dir / "sketch" / shape_name / img_name_side).c_str();
 
-                    // TargetData target_side;
-                    // string contour_side = (data_dir / "sketch" / shape_name / ("S_" + to_string(k) + "_contour.json")).c_str();
-                    // JsonUtil::load_annos(contour_side, target_side.contours);
+                    TargetData target_side;
+                    target_side.dn_path = (data_dir / "color" / shape_name / ("S_" + to_string(k) + "_d.json")).c_str();
+                    string contour_side = (data_dir / "sketch" / shape_name / ("S_" + to_string(k) + "_contour.json")).c_str();
+                    JsonUtil::load_annos(contour_side, target_side.contours);
 
-                    // raw_data.targets.push_back(target_side);
-                    add_target(shape_name, raw_data);
+                    raw_data.targets.push_back(target_side);
+                    // add_target(shape_name, raw_data);
                     raw_datas.push_back(raw_data);
                 }
             }
@@ -166,39 +168,40 @@ Sample SoloDataset::get(size_t index)
     cv::Mat img, img_side;
     if (Cfg::input_views == "FS")
     {
-        if (!parseSketch(raw_data.img_path, img))
-        {
-            cerr << __FILE__ << " " << __LINE__ << ": " << raw_data.img_path << " doesn't exist" << endl;
-            exit(-1);
-        }
+        // // ==================Unuseful for SOLO segmentation==================
+        // if (!parseSketch(raw_data.img_path, img))
+        // {
+        //     cerr << __FILE__ << " " << __LINE__ << ": " << raw_data.img_path << " doesn't exist" << endl;
+        //     exit(-1);
+        // }
 
-        if (!parseSketch(raw_data.img_path_side, img_side))
-        {
-            cerr << __FILE__ << " " << __LINE__ << ": " << raw_data.img_path_side << " doesn't exist" << endl;
-            exit(-1);
-        }
-        cv::resize(img, img, cv::Size(Cfg::input_size, Cfg::input_size));
-        cv::resize(img_side, img_side, cv::Size(Cfg::input_size, Cfg::input_size));
-        img = ImgUtil::normalize_img(img);
-        img_side = ImgUtil::normalize_img(img_side);
-        auto img_tensor = ImgUtil::CvImageToTensor(img);
-        auto img_side_tensor = ImgUtil::CvImageToTensor(img_side);
-        result.data.image = torch::stack({img_tensor, img_side_tensor});
+        // if (!parseSketch(raw_data.img_path_side, img_side))
+        // {
+        //     cerr << __FILE__ << " " << __LINE__ << ": " << raw_data.img_path_side << " doesn't exist" << endl;
+        //     exit(-1);
+        // }
+        // cv::resize(img, img, cv::Size(Cfg::input_size, Cfg::input_size));
+        // cv::resize(img_side, img_side, cv::Size(Cfg::input_size, Cfg::input_size));
+        // img = ImgUtil::normalize_img(img);
+        // img_side = ImgUtil::normalize_img(img_side);
+        // auto img_tensor = ImgUtil::CvImageToTensor(img);
+        // auto img_side_tensor = ImgUtil::CvImageToTensor(img_side);
+        // result.data.image = torch::stack({img_tensor, img_side_tensor});
 
-        if (false)
-        {
-            cv::Mat un_img = ImgUtil::TensorToCvMat(img_tensor);
-            un_img = ImgUtil::unnormalize_img(un_img);
-            un_img.convertTo(un_img, CV_8U);
-            cv::imshow("img_front_orig", img);
-            cv::imshow("img_front", un_img);
-            cv::Mat un_img_side = ImgUtil::TensorToCvMat(img_side_tensor);
-            un_img_side = ImgUtil::unnormalize_img(un_img_side);
-            cv::imshow("img_side_orig", img_side);
-            un_img_side.convertTo(un_img, CV_8U);
-            cv::imshow("img_side", un_img_side);
-            cv::waitKey(-1);
-        }
+        // if (false)
+        // {
+        //     cv::Mat un_img = ImgUtil::TensorToCvMat(img_tensor);
+        //     un_img = ImgUtil::unnormalize_img(un_img);
+        //     un_img.convertTo(un_img, CV_8U);
+        //     cv::imshow("img_front_orig", img);
+        //     cv::imshow("img_front", un_img);
+        //     cv::Mat un_img_side = ImgUtil::TensorToCvMat(img_side_tensor);
+        //     un_img_side = ImgUtil::unnormalize_img(un_img_side);
+        //     cv::imshow("img_side_orig", img_side);
+        //     un_img_side.convertTo(un_img, CV_8U);
+        //     cv::imshow("img_side", un_img_side);
+        //     cv::waitKey(-1);
+        // }
     }
     else
     {
@@ -210,7 +213,7 @@ Sample SoloDataset::get(size_t index)
         cv::resize(img, img, cv::Size(Cfg::input_size, Cfg::input_size));
         img = ImgUtil::normalize_img(img);
         auto img_tensor = ImgUtil::CvImageToTensor(img);
-        result.data.image = torch::stack({img_tensor});
+        result.data.image = img_tensor;
 
         if (false)
         {
@@ -229,6 +232,7 @@ Sample SoloDataset::get(size_t index)
     std::vector<torch::Tensor> depth_vec;
     std::vector<torch::Tensor> contour_vec;
     std::vector<int> classes;
+
     for (size_t i = 0; i < raw_data.targets.size(); i++) // # views
     {
         auto &contours = raw_data.targets[i].contours;
@@ -260,7 +264,7 @@ Sample SoloDataset::get(size_t index)
             cv::patchNaNs(depth, 0.0);
             cv::resize(depth, depth, cv::Size(Cfg::input_size, Cfg::input_size));
 
-            auto depth_tensor = ImgUtil::CvImageToTensor(depth);
+            auto depth_tensor = ImgUtil::CvImageToTensor(depth).squeeze(0);
             if (false)
             {
                 cv::Mat tmp = ImgUtil::TensorToCvMat(depth_tensor);
@@ -270,7 +274,7 @@ Sample SoloDataset::get(size_t index)
             }
 
             cv::Mat mask = (depth > 0) / 255.0;
-            auto mask_tensor = ImgUtil::CvImageToTensor(mask);
+            auto mask_tensor = ImgUtil::CvImageToTensor(mask).squeeze(0);
             if (false)
             {
                 cv::Mat tmp = ImgUtil::TensorToCvMat(mask_tensor);
@@ -324,9 +328,9 @@ bool SoloDataset::parseSketch(const std::string imgName, cv::Mat &sketch)
 
     sketch = cv::imread(imgName, cv::IMREAD_UNCHANGED);
 
-    if (sketch.channels() == 3)
+    if (sketch.channels() == 1)
     {
-        cv::cvtColor(sketch, sketch, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(sketch, sketch, cv::COLOR_GRAY2BGR);
     }
     return true;
 }

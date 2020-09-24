@@ -3,6 +3,7 @@
 #include "config.h"
 #include "TorchUtil.h"
 #include "loss.h"
+#include "nms.h"
 #include <ImgUtil.h>
 
 using namespace std;
@@ -17,10 +18,198 @@ SOLOImpl::SOLOImpl()
     register_module("head", head);
 }
 
-SoloOut SOLOImpl::forward(const at::Tensor &input, bool eval)
+SoloOut SOLOImpl::forward(const at::Tensor &input)
 {
     auto features = fpn->forward(input);
-    return head->forward(features, eval);
+    return head->forward(features);
+}
+
+// Input: processed imags
+SoloPred SOLOImpl::predict(const at::Tensor &input)
+{
+    this->eval();
+    torch::NoGradGuard();
+
+    SoloOut head_out = this->forward(input);
+    SoloPred pred;
+    post_process(head_out, pred);
+    return pred;
+}
+
+bool SOLOImpl::post_process(SoloOut &head_out, SoloPred &solo_pred)
+{
+    int upsampled_h = head_out.ins_preds[0].size(2);
+    int upsampled_w = head_out.ins_preds[0].size(3);
+    std::vector<at::Tensor> &cate_pred_vec = head_out.cate_preds;
+    std::vector<at::Tensor> &ins_pred_vec = head_out.ins_preds;
+    for (size_t l = 0; l < cate_pred_vec.size(); l++)
+    {
+        auto &cate_pred = head_out.cate_preds[l];
+        auto &ins_pred = head_out.ins_preds[l];
+        ins_pred = ins_pred.sigmoid();
+        ins_pred = F::interpolate(ins_pred, F::InterpolateFuncOptions().size(std::vector<int64_t>({upsampled_h, upsampled_w})).mode(torch::kBilinear).align_corners(false));
+        cate_pred = cate_pred.sigmoid();
+        cate_pred = point_nms(cate_pred);
+        cate_pred = cate_pred.permute({0, 2, 3, 1});
+
+        cate_pred_vec[l] = cate_pred_vec[l].reshape({-1, Cfg::num_classes - 1});
+        ins_pred_vec[l] = ins_pred_vec[l].squeeze(0);
+        // cout << l << " " << cate_pred_vec[l].sizes() << " ins: " << ins_pred_vec[l].sizes() << endl;
+    }
+    at::Tensor cate_preds = torch::cat(cate_pred_vec, 0);
+    at::Tensor ins_preds = torch::cat(ins_pred_vec, 0);
+
+    // category scores and labels
+    auto ind = (cate_preds > Cfg::score_thr).nonzero();
+    auto inds = ind.narrow(1, 0, 1).flatten();
+    auto cate_labels = ind.narrow(1, 1, 1).flatten();
+    auto cate_scores = cate_preds.index({inds, cate_labels});
+
+    if (false)
+    {
+        cout << "cate_preds: " << cate_preds.sizes() << endl;
+        cout << "ins_preds: " << ins_preds.sizes() << endl;
+        cout << "ind: " << ind.sizes() << endl;
+        cout << "scores: " << cate_scores.sizes() << endl;
+        cout << "cate_labels: " << cate_labels.sizes() << endl;
+        cout << cate_labels << endl;
+    }
+
+    if (cate_scores.size(0) == 0)
+    {
+        cout << "No instances detected!" << endl;
+        return false;
+    }
+
+    // strides
+    auto size_trans = torch::tensor(Cfg::num_grids).pow(2).cumsum(0);
+    int num_grids_l1 = size_trans[0].detach().cpu().item().toInt();
+    int sum_grids = size_trans[-1].detach().cpu().item().toInt(); // sum of grids number across all pyramid level
+    auto strides = torch::ones({sum_grids}).to(device);
+    strides.index_put_({Slice(0, num_grids_l1)}, strides.index({Slice(0, num_grids_l1)}) * Cfg::strides[0]);
+    for (size_t l = 1; l < Cfg::strides.size(); l++)
+    {
+        int start = size_trans[l - 1].detach().cpu().item().toInt();
+        int end = size_trans[l].detach().cpu().item().toInt();
+        strides.index_put_({Slice(start, end)}, strides.index({Slice(start, end)}) * Cfg::strides[l]);
+    }
+    strides = strides.index_select(0, inds);
+    if (false)
+    {
+        cout << "size_trans: " << size_trans << endl;
+        cout << "sum_grids: " << sum_grids << endl;
+        cout << "strides: " << strides << endl;
+    }
+
+    // masks
+    auto seg_preds = ins_preds.index_select(0, inds);
+    auto seg_masks = seg_preds > Cfg::mask_thr;
+    auto sum_masks = seg_masks.sum({1, 2}).toType(at::kFloat);
+    // filter small masks
+    auto keep = (sum_masks > strides);
+    if (keep.sum().detach().cpu().item().toInt() == 0)
+    {
+        cout << "No mask detected!" << endl;
+        return false;
+    }
+    auto keep_inds = keep.nonzero().flatten();
+    seg_masks = seg_masks.index_select(0, keep_inds);
+    seg_preds = seg_preds.index_select(0, keep_inds);
+    sum_masks = sum_masks.index_select(0, keep_inds);
+    cate_scores = cate_scores.index_select(0, keep_inds);
+    cate_labels = cate_labels.index_select(0, keep_inds);
+
+    if (false)
+    {
+        cout << "sum_masks: " << sum_masks.sizes() << endl;
+        cout << "keep_inds: " << keep_inds.sizes() << endl;
+        cout << "seg_masks: " << seg_masks.sizes() << endl;
+        cout << "seg_preds: " << seg_preds.sizes() << endl;
+        cout << "cate_scores: " << cate_scores.sizes() << endl;
+        cout << "cate_labels: " << cate_labels.sizes() << endl;
+        SoloPred solo_pred = {cate_scores, cate_labels, seg_masks};
+        visualize_pred(solo_pred, "./result/raw/");
+    }
+
+    // mask scoring
+    auto seg_scores = (seg_preds * seg_masks.toType(at::kFloat)).sum({1, 2}) / sum_masks;
+    cate_scores *= seg_scores;
+    // sort and keep nms_pre
+    auto sort_inds = cate_scores.argsort(0, true);
+    if (cate_scores.size(0) > Cfg::nms_pre)
+    {
+        sort_inds = sort_inds.index({Slice(0, Cfg::nms_pre)});
+    }
+    seg_masks = seg_masks.index_select(0, sort_inds);
+    seg_preds = seg_preds.index_select(0, sort_inds);
+    sum_masks = sum_masks.index_select(0, sort_inds);
+    cate_scores = cate_scores.index_select(0, sort_inds);
+    cate_labels = cate_labels.index_select(0, sort_inds);
+    // Matrix NMS
+    cate_scores = matrix_nms(seg_masks, cate_labels, cate_scores, sum_masks);
+    keep_inds = (cate_scores >= Cfg::update_thr).nonzero().flatten();
+    if (keep_inds.size(0) == 0)
+    {
+        cerr << __FILE__ << " " << __LINE__ << " No instances detected!\n";
+        return false;
+    }
+    seg_preds = seg_preds.index_select(0, keep_inds);
+    cate_scores = cate_scores.index_select(0, keep_inds);
+    cate_labels = cate_labels.index_select(0, keep_inds);
+    // sort and keep top_k
+    sort_inds = cate_scores.argsort(0, true);
+    if (sort_inds.size(0) > Cfg::max_per_img)
+    {
+        sort_inds = sort_inds.index({Slice(0, Cfg::max_per_img)});
+    }
+
+    seg_preds = seg_preds.index_select(0, sort_inds);
+    cate_scores = cate_scores.index_select(0, sort_inds);
+    cate_labels = cate_labels.index_select(0, sort_inds);
+
+    seg_masks = (seg_preds > Cfg::mask_thr);
+
+    solo_pred = {cate_scores, cate_labels, seg_masks};
+    if (false)
+    {
+        cout << "sorted_scores\n";
+        cout << cate_scores << endl;
+        cout << "sort_inds:\n"
+             << sort_inds << endl;
+        SoloPred solo_pred = {cate_scores, cate_labels, seg_masks};
+        visualize_pred(solo_pred, "./result/nms/");
+    }
+    return true;
+}
+
+void SOLOImpl::visualize_pred(SoloPred &pred, std::string save_dir)
+{
+    if (!fs::exists(save_dir))
+    {
+        fs::create_directories(save_dir);
+    }
+
+    auto &cate_labels = pred.cate_labels;
+    auto &seg_masks = pred.seg_masks;
+
+    for (int i = 0; i < seg_masks.size(0); i++)
+    {
+        int cls = cate_labels[i].detach().cpu().item().toInt();
+        auto seg_mask = seg_masks[i].toType(at::kFloat).detach().cpu();
+        auto seg_img = ImgUtil::TensorToMaskMat(seg_mask.detach().cpu());
+        cv::imwrite(save_dir + to_string(i) + "_" + Cfg::class_names[cls + 1] + ".jpg", seg_img);
+    }
+}
+
+void SOLOImpl::visualize_input(const at::Tensor &img_tensor, std::string save_dir)
+{
+    cv::Mat img = ImgUtil::TensorToCvMat(img_tensor.detach().cpu());
+    img = ImgUtil::unnormalize_img(img);
+    if (!fs::exists(save_dir))
+    {
+        fs::create_directories(save_dir);
+    }
+    cv::imwrite(save_dir + "input.jpg", img);
 }
 
 SoloLoss SOLOImpl::loss(const SoloOut &pred, std::vector<Sample> &samples)
@@ -146,15 +335,17 @@ SoloLoss SOLOImpl::loss(const SoloOut &pred, std::vector<Sample> &samples)
                     cout << "bbox:" << gt_bboxes[hit_id] << " mask_scaled:" << seg_mask_scale.sizes() << " ins_pred:" << ins_preds[i].sizes() << endl;
                     cout << "center=" << center_w << "," << center_h << ", coord=" << coord_w << "," << coord_h << endl;
                     cout << "top " << top << " down " << down << " left " << left << " right " << right << endl;
-                    cv::Mat mask = ImgUtil::TensorToCvMat(seg_mask);
+                    std::string cls_text = Cfg::class_names[gt_cls.detach().cpu().item().toInt()];
+                    cv::Mat mask = ImgUtil::TensorToCvMat(seg_mask.detach().cpu());
                     mask = mask * 255.0;
                     mask.convertTo(mask, CV_8UC1);
                     cv::Mat color_img;
                     cv::merge(vector<cv::Mat>({mask, mask, mask}), color_img);
                     cv::circle(color_img, cv::Point(center_w, center_h), 3, cv::Scalar(0, 0, 255), -1);
                     cv::rectangle(color_img, cv::Rect(center_w - half_w, center_h - half_h, half_w * 2, half_h * 2), cv::Scalar(255, 0, 0));
+                    cv::putText(color_img, cls_text, cv::Point(center_w - half_w, center_h - half_h), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0));
                     cv::imshow(to_string(batch_id) + "_level" + to_string(i), color_img);
-                    cv::Mat mask_scale = ImgUtil::TensorToCvMat(seg_mask_scale);
+                    cv::Mat mask_scale = ImgUtil::TensorToCvMat(seg_mask_scale.detach().cpu());
                     mask_scale = mask_scale * 255.0;
                     mask_scale.convertTo(mask_scale, CV_8UC1);
                     cv::imshow(to_string(batch_id) + "_level" + to_string(i) + "_scale", mask_scale);

@@ -11,6 +11,7 @@
 #include "ImgUtil.h"
 #include "dataset.h"
 #include "TorchUtil.h"
+#include <RandUtil.h>
 
 #ifdef WITH_CUDA
 #include "sigmoid_focal_loss.h"
@@ -116,8 +117,12 @@ void testSum()
     cout << x.sum({1, 2}) << endl;
 }
 
-void testIoU()
+void testRandom()
 {
+    for (int i = 0; i < 100; i++)
+    {
+        cout << RandUtil::randint(0, 100) << endl;
+    }
 }
 
 int main()
@@ -129,6 +134,7 @@ int main()
     // testInterpolate();
     // testDiceLoss();
     // testFocalLoss();
-    testSum();
+    // testSum();
+    testRandom();
     return 0;
 }

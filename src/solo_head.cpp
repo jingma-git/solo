@@ -34,7 +34,7 @@ SOLOHeadImpl::SOLOHeadImpl()
     register_module("cate_pred", solo_cate);
 }
 
-SoloOut SOLOHeadImpl::forward(const std::vector<at::Tensor> &feats, bool eval)
+SoloOut SOLOHeadImpl::forward(const std::vector<at::Tensor> &feats)
 {
     int64_t N = feats[0].size(0); //batch_size
     std::vector<at::Tensor> new_feats = split_feats(feats);
@@ -84,17 +84,6 @@ SoloOut SOLOHeadImpl::forward(const std::vector<at::Tensor> &feats, bool eval)
         {
             cout << i << " ins_feat=" << ins_feat.sizes() << " y=" << y.sizes() << " x=" << x.sizes() << " coord=" << coord_feat.sizes();
             cout << " ins_pred=" << ins_pred.sizes() << " cate_pred=" << cate_pred.sizes() << endl;
-        }
-
-        if (eval)
-        {
-            int upsampled_h = feats[0].size(2);
-            int upsampled_w = feats[0].size(3);
-            ins_pred = ins_pred.sigmoid(); //!!!very important
-            ins_pred = F::interpolate(ins_pred, F::InterpolateFuncOptions().size(std::vector<int64_t>({upsampled_h, upsampled_w})).mode(torch::kBilinear).align_corners(false));
-            cate_pred = cate_pred.sigmoid();
-            cate_pred = point_nms(cate_pred);
-            cate_pred = cate_pred.permute({0, 2, 3, 1});
         }
         out.ins_preds[i] = ins_pred;
         out.cate_preds[i] = cate_pred;

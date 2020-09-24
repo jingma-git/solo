@@ -15,7 +15,7 @@ class SOLOHeadImpl : public torch::nn::Module
 public:
     SOLOHeadImpl();
 
-    SoloOut forward(const std::vector<at::Tensor> &feats, bool eval = false);
+    SoloOut forward(const std::vector<at::Tensor> &feats);
 
 private:
     std::vector<at::Tensor> split_feats(const std::vector<at::Tensor> &feats);

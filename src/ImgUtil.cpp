@@ -86,7 +86,7 @@ namespace ImgUtil
             torch::from_blob(channelsConcatenatedFloat.data, {image.channels(), image.rows, image.cols},
                              options.requires_grad(false))
                 .clone(); // clone is required to copy data from temporary object
-        return tensor_image.squeeze();
+        return tensor_image;
     }
 
     cv::Mat TensorToCvMat(const torch::Tensor &tensor)
