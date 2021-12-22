@@ -7,10 +7,10 @@
 #include "sigmoid_focal_loss.h"
 #include "solo_head.h"
 #include "conv_module.h"
-#include "config.h"
 #include "ImgUtil.h"
-#include "dataset.h"
 #include "TorchUtil.h"
+#include "config.h"
+#include "statistic.h"
 #include <RandUtil.h>
 
 #ifdef WITH_CUDA
@@ -135,6 +135,7 @@ int main()
     // testDiceLoss();
     // testFocalLoss();
     // testSum();
-    testRandom();
+    // testRandom();
+    StatUtil::analyze_dataset();
     return 0;
 }

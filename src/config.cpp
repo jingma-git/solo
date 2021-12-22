@@ -33,8 +33,9 @@ int Cfg::in_channels = 3;
 int Cfg::num_classes = Cfg::class_names.size();
 std::vector<int> Cfg::num_grids = {40, 36, 24, 16, 12};
 std::vector<std::vector<int>> Cfg::scale_ranges =
-    // {{1, 96}, {48, 192}, {96, 384}, {192, 768}, {384, 2048}};
-    {{8, 32}, {16, 64}, {32, 128}, {64, 256}, {128, 512}};
+    {{1, 96}, {48, 192}, {96, 384}, {192, 768}, {384, 2048}};
+// {{8, 32}, {16, 64}, {32, 128}, {64, 256}, {128, 512}}
+;
 int Cfg::stacked_convs = 7;
 int Cfg::num_groups = 32;
 std::vector<int> Cfg::strides = {8, 8, 16, 32, 32};

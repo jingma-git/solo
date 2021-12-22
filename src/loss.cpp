@@ -44,3 +44,4 @@ at::Tensor sigmoid_focal_loss(const at::Tensor &pred,
     exit(-1);
 #endif
 }
+

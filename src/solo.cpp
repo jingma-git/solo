@@ -238,7 +238,7 @@ SoloLoss SOLOImpl::loss(const SoloOut &pred, std::vector<Sample> &samples)
             auto gt_bboxs_raw = samples[batch_id].target.gt_bboxs;
             auto gt_masks_raw = samples[batch_id].target.gt_masks;
 
-            auto gt_areas = TorchUtil::bbox_area(gt_bboxs_raw);
+            auto gt_areas = TorchUtil::bbox_side_len(gt_bboxs_raw);
             auto ins_label = torch::zeros({num_grid * num_grid, height, width}, torch::kUInt8).to(device);
             auto cate_label = torch::zeros({num_grid, num_grid}, torch::kInt64).to(device);
             auto ins_ind_label = torch::zeros({num_grid * num_grid}, torch::kBool).to(device);

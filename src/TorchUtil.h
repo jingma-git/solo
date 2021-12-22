@@ -9,6 +9,16 @@ namespace TorchUtil
         auto y0 = bbox.narrow(1, 1, 1);
         auto x1 = bbox.narrow(1, 2, 1);
         auto y1 = bbox.narrow(1, 3, 1);
+        // return torch::sqrt((x1 - x0) * (y1 - y0));
+        return (x1 - x0) * (y1 - y0);
+    }
+
+    inline at::Tensor bbox_side_len(const at::Tensor &bbox)
+    {
+        auto x0 = bbox.narrow(1, 0, 1);
+        auto y0 = bbox.narrow(1, 1, 1);
+        auto x1 = bbox.narrow(1, 2, 1);
+        auto y1 = bbox.narrow(1, 3, 1);
         return torch::sqrt((x1 - x0) * (y1 - y0));
     }
 

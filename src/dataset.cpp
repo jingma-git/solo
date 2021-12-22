@@ -312,6 +312,10 @@ Sample SoloDataset::get(size_t index)
         cout << "cls: " << result.target.gt_classes.sizes() << endl;
         cout << "mask: " << result.target.gt_masks.sizes() << endl;
         // cout << "depth: " << result.target.gt_depths.sizes() << endl;
+
+        // bbox: [13, 4]
+        // cls:  [13]
+        // mask: [13, 512, 512]
     }
     return result;
 }
